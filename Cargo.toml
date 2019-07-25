@@ -1,0 +1,6 @@
+[package]
+description = "INKC rust implmentation"
+name = "INKC"
+version = "0.1.0"
+authors = ["Inkcdev <dev@inkc.io>"]
+license = "GPL-.30"
