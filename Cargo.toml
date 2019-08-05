@@ -1,6 +1,30 @@
 [package]
-description = "INKC rust implmentation"
-name = "INKC"
+description = "inkc rust implmentation"
+name = "inkc"
 version = "0.1.0"
 authors = ["Inkcdev <dev@inkc.io>"]
 license = "GPL-.30"
+
+[dependencies]
+log = "0.4"
+may = "0.3"
+url = "1.7"
+fern = "0.5"
+config = "0.8"
+failure = "0.1"
+num_cpus = "1"
+lazy_static = "1"
+tungstenite = "0.5"
+
+serde = "1"
+serde_json = "1"
+serde_derive = "1"
+
+base64 = "0.6"
+secp256k1 = "0.9"
+sha2 = "0.7"
+
+[dependencies.rusqlite]
+version = "0.13"
+features = ["bundled"]
+
