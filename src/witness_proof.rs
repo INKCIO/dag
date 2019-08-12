@@ -1,4 +1,4 @@
-use error::{Result, inkcError};
+use error::{Result, INKCError};
 use joint::Joint;
 use my_witness::MY_WITNESSES;
 use object_hash;
@@ -27,7 +27,7 @@ pub fn prepare_witness_proof(
     let last_ball_unit;
 
     if storage::determine_if_witness_and_address_definition_have_refs(db, &witnesses)? {
-        bail!(inkcError::WitnessChanged);
+        bail!(INKCError::WitnessChanged);
     }
 
     // collect all unstable MC units
@@ -86,7 +86,7 @@ pub fn prepare_witness_proof(
     last_ball_unit = row.0;
     last_ball_mci = row.1;
     if last_stable_mci >= last_ball_mci {
-        bail!(inkcError::CatchupAlreadyCurrent);
+        bail!(INKCError::CatchupAlreadyCurrent);
     }
 
     // add definition changes and new definitions of witnesses
@@ -132,8 +132,8 @@ pub fn prepare_witness_proof(
 
 #[derive(Debug)]
 pub struct ProcessWitnessProof {
-    last_ball_units: Vec<String>,
-    assoc_last_ball_by_last_ball_unit: HashMap<String, String>,
+    pub last_ball_units: Vec<String>,
+    pub assoc_last_ball_by_last_ball_unit: HashMap<String, String>,
 }
 
 pub fn process_witness_proof(
@@ -298,7 +298,6 @@ pub fn process_witness_proof(
     };
 
     for joint in witness_change_and_definition {
-        let unit = &joint.unit;
         let unit_hash = joint.get_unit_hash();
         if from_current {
             let mut stmt = db.prepare_cached("SELECT 1 FROM units WHERE unit=? AND is_stable=1")?;
@@ -307,7 +306,7 @@ pub fn process_witness_proof(
                 continue;
             }
         }
-        validate_unit(unit, true)?;
+        validate_unit(&joint.unit, true)?;
     }
 
     for joint in witness_joints {

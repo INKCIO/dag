@@ -1,7 +1,7 @@
 use failure::Error;
 
 #[derive(Debug, Fail)]
-pub enum inkcError {
+pub enum INKCError {
     // TODO: need to define own error
     #[fail(display = "catchup prepare already current")]
     CatchupAlreadyCurrent,

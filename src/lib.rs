@@ -48,4 +48,4 @@ mod storage;
 pub mod validation;
 pub mod witness_proof;
 
-pub use error::{Result, inkcError};
+pub use error::{Result, INKCError};

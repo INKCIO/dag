@@ -6,9 +6,9 @@ extern crate log;
 extern crate serde_json;
 extern crate base64;
 extern crate fern;
-extern crate inkc;
+extern crate INKC;
 
-use inkc::*;
+use INKC::*;
 
 fn test_json() -> Result<()> {
     let data = r#"

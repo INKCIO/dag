@@ -25,7 +25,7 @@ impl DatabasePool {
             for _ in 0..(num_cpus::get() * 4) {
                 go!(s, || {
                     let conn = match Connection::open_with_flags(
-                        "db/inkc.sqlite",
+                        "db/INKC.sqlite",
                         OpenFlags::SQLITE_OPEN_READ_WRITE,
                     ) {
                         Ok(conn) => conn,
