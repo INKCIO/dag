@@ -1,6 +1,7 @@
 use std::io::{Read, Write};
 use std::net::ToSocketAddrs;
 
+use config;
 use error::Result;
 use may::net::TcpStream;
 use may_actor::Actor;
@@ -25,10 +26,30 @@ lazy_static! {
 pub struct HubConn(pub Actor<HubConnImpl<TcpStream>>);
 
 impl HubConn {
-    // just a simple example interface
-    pub fn send_message(&self, msg: Value) {
-        self.0
-            .call(move |me| me.send_json(&json!(["justsaying", msg])).unwrap());
+    #[inline]
+    pub fn with<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut HubConnImpl<TcpStream>) -> R + Send,
+        R: Send,
+    {
+        self.0.with(f)
+    }
+
+    pub fn send_version(&self) -> Result<()> {
+        // TODO: read these things from config
+        self.0.with(|me| {
+            me.send_just_saying(
+                "version",
+                json!({
+                    "protocol_version": config::VERSION, 
+	                "alt": config::ALT, 
+		            "library": "rust-INKC", 
+		            "library_version": "0.1.0", 
+		            "program": "rust-INKC-hub", 
+		            "program_version": "0.1.0"
+                }),
+            )
+        })
     }
 }
 
@@ -36,6 +57,7 @@ pub struct HubConnImpl<T: Read + Write> {
     // this half is only used for send message
     // the other receive half is within the actor driver
     conn: WebSocket<T>,
+    peer: String,
 }
 
 impl<T: Read + Write> Drop for HubConnImpl<T> {
@@ -46,17 +68,26 @@ impl<T: Read + Write> Drop for HubConnImpl<T> {
 
 impl<T: Read + Write> Connection<T> for HubConnImpl<T> {
     fn new(s: WebSocket<T>) -> Self {
-        HubConnImpl { conn: s }
+        // TODO: need to add peer init
+        let peer = "peer".to_owned();
+        HubConnImpl { conn: s, peer }
     }
 
-    fn send_json(&mut self, value: &Value) -> Result<()> {
-        let msg = serde_json::to_string(value)?;
+    fn send_json(&mut self, value: Value) -> Result<()> {
+        let msg = serde_json::to_string(&value)?;
+        info!("SENDING to {}: {}", self.peer, msg);
         self.conn.write_message(Message::Text(msg))?;
         Ok(())
     }
 
-    fn on_message(&mut self, msg: Value) -> Result<()> {
-        println!("recv a message: {}", msg);
+    fn on_message(&mut self, mut msg: Value) -> Result<()> {
+        let mut content = msg[1].take();
+        let subject = content["subject"].take();
+        let body = content["body"].take();
+        match subject.as_str().unwrap_or("none") {
+            "version" => self.on_version(body)?,
+            subject => bail!("on_message unkown subject: {}", subject),
+        }
         Ok(())
     }
 
@@ -71,6 +102,63 @@ impl<T: Read + Write> Connection<T> for HubConnImpl<T> {
     }
 }
 
+impl<T: Read + Write> HubConnImpl<T> {
+    pub fn close(&self) {
+        unimplemented!()
+    }
+}
+
+impl<T: Read + Write> HubConnImpl<T> {
+    fn on_version(&mut self, version: Value) -> Result<()> {
+        if version["protocol_version"].as_str() != Some(config::VERSION) {
+            let err_msg = format!("Incompatible versions, mine {}", config::VERSION);
+            self.send_error(json!(err_msg))?;
+            self.close();
+            return Ok(());
+        }
+
+        if version["alt"].as_str() != Some(config::ALT) {
+            let err_msg = format!("Incompatible alt, mine {}", config::ALT);
+            self.send_error(json!(err_msg))?;
+            self.close();
+            return Ok(());
+        }
+
+        info!("got peer version: {}", version);
+        Ok(())
+    }
+}
+
+impl<T: Read + Write> HubConnImpl<T> {
+    pub fn send_message(&mut self, kind: &str, content: Value) -> Result<()> {
+        self.send_json(json!([kind, &content]))
+    }
+
+    pub fn send_just_saying(&mut self, subject: &str, body: Value) -> Result<()> {
+        self.send_message("justsaying", json!({"subject": subject, "body": body}))
+    }
+
+    pub fn send_error(&mut self, error: Value) -> Result<()> {
+        self.send_just_saying("error", error)
+    }
+
+    pub fn send_info(&mut self, info: Value) -> Result<()> {
+        self.send_just_saying("info", info)
+    }
+
+    pub fn send_result(&mut self, result: Value) -> Result<()> {
+        self.send_just_saying("result", result)
+    }
+
+    pub fn send_error_result(&mut self, unit: &str, error: &str) -> Result<()> {
+        self.send_result(json!({"unit": unit, "result": "error", "error": error}))
+    }
+
+    pub fn send_response(&mut self, tag: &str, response: Value) -> Result<()> {
+        self.send_message("response", json!({"tag": tag, "response": response}))
+    }
+}
+
 pub fn create_outbound_conn<A: ToSocketAddrs>(address: A) -> Result<HubConn> {
     let stream = TcpStream::connect(address)?;
     let r_stream = stream.try_clone()?;
@@ -80,7 +168,7 @@ pub fn create_outbound_conn<A: ToSocketAddrs>(address: A) -> Result<HubConn> {
 
     let (conn, _) = client(req, stream)?;
     let r_ws = WebSocket::from_raw_socket(r_stream, Role::Client);
-    let actor = Actor::drive_new(HubConnImpl { conn }, move |actor| {
+    let actor = Actor::drive_new(HubConnImpl::new(conn), move |actor| {
         super::network::connection_receiver(r_ws, actor)
     });
 
@@ -101,5 +189,5 @@ pub fn new_wss(host: &str) -> Result<HubConnImpl<TlsStream<TcpStream>>> {
     let req = Request::from(url);
 
     let (conn, _) = client(req, stream)?;
-    Ok(HubConnImpl { conn })
+    Ok(HubConnImpl::new(conn))
 }
